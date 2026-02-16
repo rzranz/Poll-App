@@ -1,36 +1,18 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Real-Time Poll Rooms
 
-## Getting Started
+A full-stack real-time polling application built with Next.js (App Router) and Supabase.
 
-First, run the development server:
+## Fairness & Anti-Abuse Mechanisms
+I implemented two distinct layers of defense to prevent repeat/abusive voting:
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. **IP-Based Tracking (Backend/Database Level):** A composite unique constraint `UNIQUE(poll_id, ip_address)` is enforced on the `votes` table in PostgreSQL. The Next.js API route extracts the voter's IP via the `x-forwarded-for` header. If a user attempts to vote multiple times on the same poll, the database rejects the transaction at the core level (Error 23505), preventing automated server-side abuse.
+2. **Client-Side State Persistence (Frontend Level):** Upon a successful vote, the specific `poll_id` is appended to an array in the browser's `localStorage`. When the poll is revisited, the application checks this storage, instantly disables the voting buttons, and reveals the real-time results. This prevents accidental double-voting and provides immediate visual feedback.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Edge Cases Handled
+* **Invalid/Missing Route Parameters:** Navigating to `/poll/` without a valid UUID parameter normally triggers a generic 404. I implemented a route interception at `app/poll/page.tsx` that gracefully redirects incomplete URLs back to the homepage (`/`).
+* **Empty/Whitespace Payloads:** The poll creation API strictly validates payloads. It trims inputs and ensures at least two valid, non-empty options are provided before attempting database insertion, preventing corrupted UI states.
+* **Optimistic UI Masking:** The poll results (percentages and progress bars) are strictly hidden behind a `hasVoted` state check until the user casts their vote, preventing the current tally from influencing their decision.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Known Limitations & Future Improvements
+* **NAT/Shared Network Collisions:** Because the primary defense mechanism relies on IP tracking, multiple legitimate users sharing the same local network (e.g., a university Wi-Fi or corporate NAT) will share the same public IP. The first voter will block others on that network. A future iteration would implement lightweight browser fingerprinting or optional OAuth to safely distinguish users on the same network.
+* **Incognito Mode Bypass:** The `localStorage` check can easily be bypassed by opening an Incognito window, although the IP tracking mechanism acts as a fallback to catch these attempts.
